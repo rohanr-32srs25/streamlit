@@ -149,18 +149,32 @@ def create_placeholder_image():
 
 # Function to perform Netflix login and take screenshots
 def login_netflix(email, password):
-    # Configure Chrome options for headless mode
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--no-sandbox")
-    
-    # Setup the Chrome driver
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     screenshots = []
-    
     try:
+        # Configure Chrome options for headless mode
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        # Try multiple approaches to initialize Chrome driver
+        driver = None
+        try:
+            # Try with ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e:
+            st.warning(f"ChromeDriverManager failed: {e}")
+            try:
+                # Try with direct Chrome path (common in cloud environments)
+                driver = webdriver.Chrome(options=chrome_options)
+            except Exception as e2:
+                st.error(f"Failed to initialize Chrome driver: {e2}")
+                # Show a placeholder image instead when running in cloud
+                return create_login_placeholder_images(email)
+        
         # Navigate to Netflix login page
         driver.get("https://www.netflix.com/login")
         
@@ -311,11 +325,59 @@ def login_netflix(email, password):
             
         return screenshots
     except Exception as e:
-        print(f"Error during Netflix login: {e}")
-        return []
+        st.error(f"Error during Netflix login: {e}")
+        # Return placeholder images instead of empty list
+        return create_login_placeholder_images(email)
     finally:
-        # Close the browser
-        driver.quit()
+        # Close the browser if it was initialized
+        if 'driver' in locals() and driver is not None:
+            driver.quit()
+
+# Function to create placeholder login images when selenium fails
+def create_login_placeholder_images(email):
+    # Create placeholder images to simulate the login process
+    images = []
+    
+    # Create first image (pre-login)
+    width, height = 800, 600
+    image1 = Image.new('RGB', (width, height), color=(0, 0, 0))
+    draw = ImageDraw.Draw(image1)
+    
+    # Try to use a font or fallback to default
+    try:
+        font = ImageFont.truetype("Arial", 36)
+        small_font = ImageFont.truetype("Arial", 24)
+    except:
+        font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+    
+    # Add explanatory text and timestamp
+    timestamp = get_indian_datetime()
+    draw.text((width/2-300, height/2-100), "Netflix login screenshot unavailable", font=font, fill=(255, 255, 255))
+    draw.text((width/2-300, height/2), f"Email: {email[:3]}{'*' * (len(email) - 6)}{email[-3:]}", font=small_font, fill=(255, 255, 255))
+    draw.text((width/2-300, height/2+50), f"Password: ********", font=small_font, fill=(255, 255, 255))
+    draw.text((width/2-300, height/2+150), f"Timestamp: {timestamp}", font=small_font, fill=(255, 255, 255))
+    
+    # Convert to bytes
+    result_bytes1 = io.BytesIO()
+    image1.save(result_bytes1, format='PNG')
+    result_bytes1.seek(0)
+    images.append(("Pre-login with credentials", add_timestamp_to_image(result_bytes1.getvalue())))
+    
+    # Create second image (post-login)
+    image2 = Image.new('RGB', (width, height), color=(0, 0, 0))
+    draw = ImageDraw.Draw(image2)
+    draw.text((width/2-300, height/2-50), "Post-login Netflix screenshot unavailable", font=font, fill=(255, 255, 255))
+    draw.text((width/2-300, height/2+50), f"Running in cloud environment", font=small_font, fill=(255, 255, 255))
+    draw.text((width/2-300, height/2+100), f"Timestamp: {timestamp}", font=small_font, fill=(255, 255, 255))
+    
+    # Convert to bytes
+    result_bytes2 = io.BytesIO()
+    image2.save(result_bytes2, format='PNG')
+    result_bytes2.seek(0)
+    images.append(("Post-login Netflix", add_timestamp_to_image(result_bytes2.getvalue())))
+    
+    return images
 
 # Streamlit UI
 def main():
