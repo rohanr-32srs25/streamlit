@@ -159,7 +159,7 @@ def login_netflix(email, password):
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         
-        # Try multiple approaches to initialize Chrome driver - using the EXACT same approach as get_netflix_screenshot
+        # Try multiple approaches to initialize Chrome driver
         driver = None
         try:
             # Try with ChromeDriverManager
@@ -191,19 +191,19 @@ def login_netflix(email, password):
                 EC.presence_of_element_located((By.NAME, "password"))
             )
             
-            # Enter email
+            # Enter email first and take screenshot before entering password
             email_field.clear()
             email_field.send_keys(email)
+            
+            # Take initial screenshot with only email filled
+            email_only_screenshot = driver.get_screenshot_as_png()
+            screenshots.append(("Login page with email entered", add_timestamp_to_image(email_only_screenshot)))
             
             # Enter password
             password_field.clear()
             password_field.send_keys(password)
             
-            # Take a screenshot now at login page (regardless of password visibility)
-            pre_login_screenshot = driver.get_screenshot_as_png()
-            screenshots.append(("Login page with credentials", add_timestamp_to_image(pre_login_screenshot)))
-            
-            # Try multiple approaches to make password visible - but don't fail if this doesn't work
+            # Try multiple approaches to make password visible - more aggressive approach from app.py
             password_toggled = False
         
             # APPROACH 1: Try to find and click on eye symbol using better selectors
@@ -242,29 +242,42 @@ def login_netflix(email, password):
                         toggle_element.click()
                         time.sleep(1)
                         password_toggled = True
-                        print(f"Password toggle successful with selector: {selector}")
+                        st.success("Password toggle successful")
                         break
                     except Exception:
                         continue
             except Exception as e:
-                print(f"Failed to click on password toggle using selectors: {e}")
+                st.warning(f"Failed to click on password toggle using selectors: {e}")
             
-            # APPROACH 2: If clicking failed, try to change input type using JavaScript
+            # APPROACH 2: If clicking failed, try to change input type using JavaScript - more aggressive
             if not password_toggled:
                 try:
-                    # Use JavaScript to change the input type from password to text
-                    js_script = """
-                    document.querySelector('input[type="password"]').type = 'text';
-                    return true;
-                    """
-                    modified = driver.execute_script(js_script)
-                    if modified:
-                        password_toggled = True
-                        print("Password field changed to text type using JavaScript")
-                        time.sleep(1)
+                    # Use multiple JavaScript approaches to change the password field
+                    js_scripts = [
+                        """document.querySelector('input[type="password"]').type = 'text'; return true;""",
+                        """document.querySelectorAll('input[type="password"]').forEach(el => el.type = 'text'); return true;""",
+                        """document.querySelector('input[name="password"]').type = 'text'; return true;""",
+                        """document.querySelectorAll('input').forEach(el => { if(el.type === 'password') el.type = 'text' }); return true;"""
+                    ]
+                    
+                    for js_script in js_scripts:
+                        try:
+                            modified = driver.execute_script(js_script)
+                            if modified:
+                                password_toggled = True
+                                st.success("Password made visible with JavaScript")
+                                time.sleep(1)
+                                break
+                        except Exception:
+                            continue
                 except Exception as js_error:
-                    print(f"JavaScript password type change failed: {js_error}")
+                    st.warning(f"JavaScript password type change failed: {js_error}")
                 
+            # Take screenshot with login form filled and password hopefully visible
+            pre_login_screenshot = driver.get_screenshot_as_png()
+            description = "Pre-login with visible password" if password_toggled else "Pre-login with credentials"
+            screenshots.append((description, add_timestamp_to_image(pre_login_screenshot)))
+            
             # Try to click login button with multiple attempts
             try:
                 # Try multiple selectors for the login button
@@ -441,6 +454,8 @@ def main():
             
             email = st.text_input("Email", key="email")
             password = st.text_input("Password", type="password", key="password")
+            
+            st.write("ℹ️ Note: The app will attempt to make your password visible in the screenshots to verify credentials. Your password will not be stored or shared.")
             
             submit_button = st.form_submit_button("Login and Capture Screenshots")
         
