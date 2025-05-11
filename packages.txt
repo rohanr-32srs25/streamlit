@@ -1,0 +1,5 @@
+chromium-browser
+chromium-driver
+zlib1g-dev
+libjpeg-dev
+libpng-dev
