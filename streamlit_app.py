@@ -77,17 +77,31 @@ def get_image_download_button(img_bytes, filename, button_text):
 
 # Function to capture Netflix screenshot
 def get_netflix_screenshot():
-    # Configure Chrome options for headless mode
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--no-sandbox")
-    
-    # Setup the Chrome driver
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    
     try:
+        # Configure Chrome options for headless mode
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        # Try multiple approaches to initialize Chrome driver
+        driver = None
+        try:
+            # Try with ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e:
+            st.warning(f"ChromeDriverManager failed: {e}")
+            try:
+                # Try with direct Chrome path (common in cloud environments)
+                driver = webdriver.Chrome(options=chrome_options)
+            except Exception as e2:
+                st.error(f"Failed to initialize Chrome driver: {e2}")
+                # Show a placeholder image instead when running in cloud
+                return create_placeholder_image()
+        
         # Navigate to Netflix
         driver.get("https://www.netflix.com")
         
@@ -101,10 +115,37 @@ def get_netflix_screenshot():
         return add_timestamp_to_image(screenshot)
     except Exception as e:
         st.error(f"Error taking screenshot: {e}")
-        return None
+        return create_placeholder_image()
     finally:
-        # Close the browser
-        driver.quit()
+        # Close the browser if it was initialized
+        if 'driver' in locals() and driver is not None:
+            driver.quit()
+
+# Function to create a placeholder image when selenium fails
+def create_placeholder_image():
+    # Create a simple image with a message
+    width, height = 800, 600
+    image = Image.new('RGB', (width, height), color=(0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    
+    # Try to use a font or fallback to default
+    try:
+        font = ImageFont.truetype("Arial", 36)
+    except:
+        font = ImageFont.load_default()
+    
+    # Add explanatory text and timestamp
+    timestamp = get_indian_datetime()
+    message = "Netflix screenshot unavailable in cloud environment"
+    draw.text((width/2-200, height/2-50), message, font=font, fill=(255, 255, 255))
+    draw.text((width/2-200, height/2+50), f"Timestamp: {timestamp}", font=font, fill=(255, 255, 255))
+    
+    # Convert to bytes
+    result_bytes = io.BytesIO()
+    image.save(result_bytes, format='PNG')
+    result_bytes.seek(0)
+    
+    return result_bytes
 
 # Function to perform Netflix login and take screenshots
 def login_netflix(email, password):
